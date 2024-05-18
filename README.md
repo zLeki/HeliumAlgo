@@ -9,12 +9,13 @@ The Helium 🎈 V 6.4.2 US30 strategy is a comprehensive trading system designed
 - Recommended Settings
   - Sensitivity HIGH
   - Max trades per day 2
-<img src="https://imgur.com/1bfc00b5-9a7d-47b7-aa53-6770404eac5b">
+![trade profits](https://imgur.com/1bfc00b5-9a7d-47b7-aa53-6770404eac5b)
+
 **SPY**
 - Recommended Settings
   - Sensitivity custom on 9.73
   - Max trades per day 2
-<img src="https://imgur.com/5fc8e682-2efc-4477-a666-6ae36f46cee2">
+![trade profits](https://imgur.com/5fc8e682-2efc-4477-a666-6ae36f46cee2)
 
 ## Features
 
