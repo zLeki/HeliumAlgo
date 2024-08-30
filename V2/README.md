@@ -2,7 +2,7 @@
 
 
 
-## Profits
+## Profits YTD
 **US30**
 - Recommended Settings
   - Sensitivity 5.25
