@@ -3,7 +3,8 @@ strategy("Work Of Art", overlay=true, max_labels_count=500)
 
 showBuySell       = input(true, "Show Buy & Sell", group="BUY & SELL SIGNALS")
 sensitivity       = input.float(3, "Sensitivity (1-16)", 1, 50, group="BUY & SELL SIGNALS")
-percentStop       = input.float(1, "Stop Loss % (0 to Disable)", 0, group="BUY & SELL SIGNALS")
+percentStop       = input.float(1, "Take Profit % (0 to Disable)", 0, group="BUY & SELL SIGNALS")
+atrMultiplier = input.float(1.5, "ATR Stop Multiplier", group="BUY & SELL SIGNALS")
 offsetSignal      = input.float(5, "Signals Offset", 0, group="BUY & SELL SIGNALS")
 showRibbon        = input(true, "Show Trend Ribbon", group="TREND RIBBON")
 smooth1           = input.int(5, "Smoothing 1", 1, group="TREND RIBBON")
@@ -156,8 +157,7 @@ wtDivBear = wtDivBear1 or wtDivBear2
 cyan = #00DBFF, cyan30 = color.new(cyan, 70)
 pink = #E91E63, pink30 = color.new(pink, 70)
 red  = #FF5252, red30  = color.new(red , 70)
-isMarketOpen =  (hour(time) >= startHour and hour(time) < endHour) 
-//and not (hour(time) == 8)
+isMarketOpen = ((hour(time) > 9 or (hour(time) == 9 and minute(time) >= 30)) and hour(time) < endHour)//and not (hour(time) == 8)
 
 var float exit_size = 0.00
 off = percWidth(300, offsetSignal)
@@ -205,13 +205,26 @@ volatilityThreshold = input.float(1.5, title="Volatility Threshold", step=0.1)
 atrPeriod = input.int(14, title="ATR Period")
 atr = ta.atr(atrPeriod)
 isVolatile = atr > volatilityThreshold
-
-if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0  and not isVolatile
+ema21 = ta.ema(close, 21)
+longAllowed = close > ema21 and close > ema
+newDay = ta.change(time("D"))
+var int tradesToday = 0
+if newDay
+    tradesToday := 0
+if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0 and not isVolatile and longAllowed and tradesToday < 3
+    tradesToday += 1
     if (barstate.isconfirmed)
         tp_1_filled := true
         tp_2_filled := true
         tp_3_filled := true
-        stop_y := lastTrade(atrStop) // Assuming atrStop is defined elsewhere
+        long_stop = entry_y - (entry_y * percentStop / 100)
+        entry_y := close  // Always set entry as the price at entry
+        // Calculate both stop types
+        atr_val = ta.atr(atrPeriod)
+        // stop_percent = entry_y * percentStop / 100
+        // stop_atr     = atr_val * atrMultiplier
+        // // Final stop is the WORST CASE for a long: the one closest to entry (the greater of the two distances)
+        // stop_y := entry_y - math.max(stop_percent, stop_atr)
         tp1_y := (entry_y - lastTrade(atrStop)) * 1 + entry_y
         tp2_y := (entry_y - lastTrade(atrStop)) * 2 + entry_y
         tp3_y := (entry_y - lastTrade(atrStop)) * 3 + entry_y    
@@ -220,16 +233,44 @@ if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 
         exit_size := strategy.position_size/3
         strategy.entry("Buy" , strategy.long)
         log.info("Buy entry")
-if bull and not emaBull and not isVolatile
-    strategy.close("Sell", "Reversal")
-    log.info("Reversal Buy - Caused by sell")
-    alert("Exit All Positions REVERSAL",alert.freq_once_per_bar_close)
-if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades == 0 and not isVolatile
+// if bull and not emaBull and not isVolatile
+//     strategy.close("Sell", "Reversal")
+//     log.info("Reversal Buy - Caused by sell")
+//     alert("Exit All Positions REVERSAL",alert.freq_once_per_bar_close)
+
+// --- ATR/PERCENT STOP LOSS FOR LONGS (and plotting) ---
+if strategy.position_size > 0
+    entry_price = strategy.position_avg_price
+    atr_val = ta.atr(atrPeriod)
+    stop_percent = percentStop > 0 ? entry_price * percentStop / 100 : na
+    stop_atr     = atr_val * atrMultiplier
+    float stop_dist = na
+    if not na(stop_percent) and not na(stop_atr)
+        stop_dist := math.min(stop_percent, stop_atr)  // Use the tighter stop (change to max for wider stop)
+    else
+        stop_dist := na
+    stop_y = entry_price - stop_dist
+
+    // Plot stop loss line at correct Y (no need for [1] indexing)
+    var line stop_line = na
+    if not na(stop_line)
+        line.delete(stop_line)
+    stop_line := line.new(bar_index, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
+
+    // Label (optional)
+    // label.new(bar_index, stop_y, "Stop Loss: " + str.tostring(math.round_to_mintick(stop_y)), color=color.red, style=label.style_label_left, textcolor=color.white)
+    // Stop loss check
+    if close < stop_y
+        strategy.close_all("Stop Loss Long")
+        alert("Exit All Positions SL", alert.freq_once_per_bar_close)
+
+shortAllowed = close < ema21 and close < ema
+if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades == 0 and not isVolatile and shortAllowed and tradesToday < 3
+    tradesToday += 1
     if (barstate.isconfirmed)
         tp_1_filled := true
         tp_2_filled := true
         tp_3_filled := true
-        stop_y := lastTrade(atrStop) // Assuming atrStop is defined elsewhere
         tp1_y := (entry_y - lastTrade(atrStop)) * 1 + entry_y
         tp2_y := (entry_y - lastTrade(atrStop)) * 2 + entry_y
         tp3_y := (entry_y - lastTrade(atrStop)) * 3 + entry_y    
@@ -238,15 +279,34 @@ if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades
         strategy.entry("Sell", strategy.short)
         log.info("Sell entry")
         alert("New Sell Label Created",alert.freq_once_per_bar_close)
-if bear and emaBull and not isVolatile
-    strategy.close_all("Reversal to downside")
-    log.info("Reversal sell - caused by buy")
-    alert("Exit All Positions REVERSAL", alert.freq_once_per_bar_close)
+// --- ATR/PERCENT STOP LOSS FOR SHORTS (and plotting) ---
+if strategy.position_size < 0
+    entry_price = strategy.position_avg_price
+    atr_val = ta.atr(atrPeriod)
+    stop_percent = percentStop > 0 ? entry_price * percentStop / 100 : na
+    stop_atr     = atr_val * atrMultiplier
+    float stop_dist = na
+    if not na(stop_percent) and not na(stop_atr)
+        stop_dist := math.min(stop_percent, stop_atr)  // Use the tighter stop (change to max for wider stop)
+    else
+        stop_dist := na
+    stop_y = entry_price + stop_dist
 
-if close < stop_y and strategy.position_size > 0 // long
-    strategy.close_all("sl")
-    alert("Exit All Positions SL",alert.freq_once_per_bar_close)
-    log.info("Stop loss triggered - Buy")
+    // Plot stop loss line at correct Y (no need for [1] indexing)
+    var line stop_line_short = na
+    if not na(stop_line_short)
+        line.delete(stop_line_short)
+    stop_line_short := line.new(bar_index, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
+
+    // Label (optional)
+    // Stop loss check
+    if close > stop_y
+        strategy.close_all("Stop Loss Short")
+        alert("Exit All Positions SL (Short)", alert.freq_once_per_bar_close)
+// if close < stop_y and strategy.position_size > 0 // long
+//     strategy.close_all("sl")
+//     alert("Exit All Positions SL",alert.freq_once_per_bar_close)
+//     log.info("Stop loss triggered - Buy")
      
 if close > stop_y and strategy.position_size < 0 // short
     strategy.close_all("sl")
@@ -259,58 +319,39 @@ if close > stop_y and strategy.position_size < 0 // short
 if close > tp1_y and strategy.position_size > 0 and tp_1_filled
     if (barstate.isconfirmed)
         // strategy.close("Buy", "tp1", qty_percent = 33, immediately = true)
-        // alert("ONE", alert.freq_once_per_bar)
-        // log.info("Take profit 1 - Long side")
+        // strategy.close_all("TP")
+        alert("ONE", alert.freq_once_per_bar)
+        log.info("Take profit 1 - Long side")
         tp_1_filled := false
 
 if close > tp2_y and strategy.position_size > 0 and tp_2_filled
     if (barstate.isconfirmed)
         // strategy.close("Buy", "tp2", qty_percent = 100, immediately = true)
-        // alert("TWO", alert.freq_once_per_bar)
-        // log.info("Take profit 2 - Long side")
+        strategy.close_all("TP")
+        alert("TWO", alert.freq_once_per_bar)
+        log.info("Take profit 2 - Long side")
         tp_2_filled := false
 if close > tp3_y and strategy.position_size > 0  and tp_3_filled
     strategy.close_all("tp3", "Buy")
     alert("THREE", alert.freq_once_per_bar)
     log.info("Take profit 3 - Long side")
     tp_3_filled := false
-// if close <= open_price and not tp_1_filled and strategy.position_size > 0
+if close <= open_price and not tp_1_filled and strategy.position_size > 0
     // strategy.close_all("break-even "+str.tostring(open_price)+str.tostring(currentPrice))
-    // alert("BE")
-    // log.info("BE - Long side")
+    alert("BE")
+    log.info("BE - Long side")
 // SHORT
-if strategy.position_size < 0
-    if close < tp1_y and strategy.position_size < 0 and tp_1_filled
-        if (barstate.isconfirmed)
-    //         strategy.close("Sell", "tp1", qty_percent = 33, immediately = true)
-            // alert("ONE", alert.freq_once_per_bar)
-            // log.info("Take profit 1 - Sell side")
-            tp_1_filled := false
-    if close < tp2_y and strategy.position_size < 0 and tp_2_filled
-    //     strategy.close("Sell", "tp2", qty_percent = 100, immediately = true)
-        // alert("TWO", alert.freq_once_per_bar)
-        // log.info("Take profit 2 - Sell side")
-        tp_2_filled := false 
-    if close < tp3_y and strategy.position_size < 0
-        strategy.close_all("tp3", "Sell")
-        alert("Exit All Positions", alert.freq_once_per_bar)
-        log.info("Take profit 3 - Sell side")
-        tp_1_filled := true
-        tp_2_filled := true    
-    // if close >= open_price and not tp_1_filled and strategy.position_size < 0
-        // strategy.close_all("break-even short "+str.tostring(tp_1_filled))
-        // alert("BE", alert.freq_once_per_bar_close)
-        log.info("BE - Sell side")
-        // tp_1_filled := true
-        // tp_2_filled := true 
+//
+if close < tp2_y and strategy.position_size < 0
+    strategy.close_all("TP")
 labelTpSl(y, txt, color) =>
     label labelTpSl = percentStop != 0 ? label.new(bar_index + 1, y, txt, xloc.bar_index, yloc.price, color, label.style_label_left, color.white, size.normal) : na
     label.delete(labelTpSl[1])
 labelTpSl(entry_y, "Entry: " + str.tostring(math.round_to_mintick(entry_y)), color.gray)
-labelTpSl(stop_y , "Stop Loss: " + str.tostring(math.round_to_mintick(stop_y)), color.red)
-labelTpSl(tp1_y, "Take Profit 1: " + str.tostring(math.round_to_mintick(tp1_y)), color.green)
-labelTpSl(tp2_y, "Take Profit 2: " + str.tostring(math.round_to_mintick(tp2_y)), color.green)
-labelTpSl(tp3_y, "Take Profit 3: " + str.tostring(math.round_to_mintick(tp3_y)), color.green)
+// labelTpSl(stop_y , "Stop Loss: " + str.tostring(math.round_to_mintick(stop_y)), color.red)
+// labelTpSl(tp1_y, "Take Profit 1: " + str.tostring(math.round_to_mintick(tp1_y)), color.green)
+labelTpSl(tp2_y, "Take Profit " + str.tostring(math.round_to_mintick(tp2_y)), color.green)
+// labelTpSl(tp3_y, "Take Profit 3: " + str.tostring(math.round_to_mintick(tp3_y)), color.green)
 lineTpSl(y, color) =>
     line lineTpSl = percentStop != 0 ? line.new(bar_index - (trigger ? countBull : countBear) + 4, y, bar_index + 1, y, xloc.bar_index, extend.none, color, line.style_solid) : na
     line.delete(lineTpSl[1])
