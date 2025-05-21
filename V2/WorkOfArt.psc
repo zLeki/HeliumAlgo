@@ -4,6 +4,7 @@ strategy("Work Of Art", overlay=true, max_labels_count=500)
 showBuySell       = input(true, "Show Buy & Sell", group="BUY & SELL SIGNALS")
 sensitivity       = input.float(3, "Sensitivity (1-16)", 1, 50, group="BUY & SELL SIGNALS")
 percentStop       = input.float(1, "Take Profit % (0 to Disable)", 0, group="BUY & SELL SIGNALS")
+maxTrades = input.int(3, "Max trades per day", group="BUY & SELL SIGNALS")
 atrMultiplier = input.float(1.5, "ATR Stop Multiplier", group="BUY & SELL SIGNALS")
 offsetSignal      = input.float(5, "Signals Offset", 0, group="BUY & SELL SIGNALS")
 showRibbon        = input(true, "Show Trend Ribbon", group="TREND RIBBON")
@@ -37,7 +38,7 @@ lenRevBands       = input.int(30, "Length", group="REVERSAL BANDS")
 currentPrice = request.security(syminfo.tickerid, timeframe.period, close)
 startHour = input.int(8, "Trading Start Hour", group="TIME FILTER")
 endHour = input.int(20, "Trading End Hour", group="TIME FILTER")
-
+var int openBarIndex = 0
 var bool tp_1_filled = true
 var bool tp_2_filled = true
 var bool tp_3_filled = true
@@ -211,7 +212,7 @@ newDay = ta.change(time("D"))
 var int tradesToday = 0
 if newDay
     tradesToday := 0
-if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0 and not isVolatile and longAllowed and tradesToday < 3
+if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0 and not isVolatile and longAllowed and tradesToday < maxTrades
     tradesToday += 1
     if (barstate.isconfirmed)
         tp_1_filled := true
@@ -228,10 +229,11 @@ if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 
         tp1_y := (entry_y - lastTrade(atrStop)) * 1 + entry_y
         tp2_y := (entry_y - lastTrade(atrStop)) * 2 + entry_y
         tp3_y := (entry_y - lastTrade(atrStop)) * 3 + entry_y    
-        alert("New Buy Label Created",alert.freq_once_per_bar_close)
+        alert("🚀 Long Entry STRIKE price @  "+str.tostring(yloc.price),alert.freq_once_per_bar_close)
         open_price := currentPrice
         exit_size := strategy.position_size/3
         strategy.entry("Buy" , strategy.long)
+        openBarIndex := bar_index
         log.info("Buy entry")
 // if bull and not emaBull and not isVolatile
 //     strategy.close("Sell", "Reversal")
@@ -252,20 +254,23 @@ if strategy.position_size > 0
     stop_y = entry_price - stop_dist
 
     // Plot stop loss line at correct Y (no need for [1] indexing)
+    var line profit_line = na
     var line stop_line = na
-    if not na(stop_line)
+    if not na(stop_line) and not na(profit_line)
         line.delete(stop_line)
-    stop_line := line.new(bar_index, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
-
+        line.delete(profit_line)
+    stop_line := line.new(openBarIndex, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
+    profit_line := line.new(openBarIndex, tp2_y, bar_index + 1, tp2_y, color=color.green, width=2, extend=extend.none)
     // Label (optional)
     // label.new(bar_index, stop_y, "Stop Loss: " + str.tostring(math.round_to_mintick(stop_y)), color=color.red, style=label.style_label_left, textcolor=color.white)
     // Stop loss check
-    if close < stop_y
-        strategy.close_all("Stop Loss Long")
-        alert("Exit All Positions SL", alert.freq_once_per_bar_close)
+    if low < stop_y
+        strategy.exit("Buy", from_entry="Buy", comment = "SL", limit=stop_y)
+        log.info("long sl hit")
+        alert("🟥 Long Stop Loss Exit", alert.freq_once_per_bar_close)
 
 shortAllowed = close < ema21 and close < ema
-if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades == 0 and not isVolatile and shortAllowed and tradesToday < 3
+if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades == 0 and not isVolatile and shortAllowed and tradesToday < maxTrades
     tradesToday += 1
     if (barstate.isconfirmed)
         tp_1_filled := true
@@ -278,7 +283,8 @@ if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades
         exit_size := strategy.position_size/3
         strategy.entry("Sell", strategy.short)
         log.info("Sell entry")
-        alert("New Sell Label Created",alert.freq_once_per_bar_close)
+        openBarIndex := bar_index
+        alert("🔻 Short Entry on STRIKE price @  "+str.tostring(yloc.price),alert.freq_once_per_bar_close)
 // --- ATR/PERCENT STOP LOSS FOR SHORTS (and plotting) ---
 if strategy.position_size < 0
     entry_price = strategy.position_avg_price
@@ -293,23 +299,27 @@ if strategy.position_size < 0
     stop_y = entry_price + stop_dist
 
     // Plot stop loss line at correct Y (no need for [1] indexing)
-    var line stop_line_short = na
-    if not na(stop_line_short)
-        line.delete(stop_line_short)
-    stop_line_short := line.new(bar_index, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
+    var line profit_line = na
+    var line stop_line = na
+    if not na(stop_line) and not na(profit_line)
+        line.delete(stop_line)
+        line.delete(profit_line)
+    stop_line := line.new(openBarIndex, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
+    profit_line := line.new(openBarIndex, tp2_y, bar_index + 1, tp2_y, color=color.green, width=2, extend=extend.none)
 
     // Label (optional)
     // Stop loss check
-    if close > stop_y
-        strategy.close_all("Stop Loss Short")
-        alert("Exit All Positions SL (Short)", alert.freq_once_per_bar_close)
+    if high > stop_y
+        strategy.exit("Sell", from_entry="Sell", comment = "SL", limit=stop_y)
+        log.info("short sl hit")
+        alert("🟥 Short Stop Loss Exit", alert.freq_once_per_bar_close)
 // if close < stop_y and strategy.position_size > 0 // long
 //     strategy.close_all("sl")
 //     alert("Exit All Positions SL",alert.freq_once_per_bar_close)
 //     log.info("Stop loss triggered - Buy")
      
-if close > stop_y and strategy.position_size < 0 // short
-    strategy.close_all("sl")
+if high > stop_y and strategy.position_size < 0 // short
+    strategy.exit("Sell", from_entry="Sell", comment = "SL", limit=stop_y)
     alert("Exit All Positions SL",alert.freq_once_per_bar_close)
     log.info("Stop loss triggered - Sell")
 
@@ -320,21 +330,20 @@ if close > tp1_y and strategy.position_size > 0 and tp_1_filled
     if (barstate.isconfirmed)
         // strategy.close("Buy", "tp1", qty_percent = 33, immediately = true)
         // strategy.close_all("TP")
-        alert("ONE", alert.freq_once_per_bar)
+        // alert("ONE", alert.freq_once_per_bar)
         log.info("Take profit 1 - Long side")
         tp_1_filled := false
 
-if close > tp2_y and strategy.position_size > 0 and tp_2_filled
-    if (barstate.isconfirmed)
-        // strategy.close("Buy", "tp2", qty_percent = 100, immediately = true)
-        strategy.close_all("TP")
-        alert("TWO", alert.freq_once_per_bar)
-        log.info("Take profit 2 - Long side")
-        tp_2_filled := false
+if high > tp2_y and strategy.position_size > 0 and tp_2_filled
+    strategy.exit("Buy", from_entry="Buy", comment = "TP", limit=tp2_y)
+    alert("FULL TP", alert.freq_once_per_bar)
+    log.info("Take profit 2 - Long side")
+    tradesToday := 5
+    tp_2_filled := false
 if close > tp3_y and strategy.position_size > 0  and tp_3_filled
     strategy.close_all("tp3", "Buy")
-    alert("THREE", alert.freq_once_per_bar)
-    log.info("Take profit 3 - Long side")
+    // alert("THREE", alert.freq_once_per_bar)
+    // log.info("Take profit 3 - Long side")
     tp_3_filled := false
 if close <= open_price and not tp_1_filled and strategy.position_size > 0
     // strategy.close_all("break-even "+str.tostring(open_price)+str.tostring(currentPrice))
@@ -342,15 +351,17 @@ if close <= open_price and not tp_1_filled and strategy.position_size > 0
     log.info("BE - Long side")
 // SHORT
 //
-if close < tp2_y and strategy.position_size < 0
-    strategy.close_all("TP")
+if low < tp2_y and strategy.position_size < 0
+    alert("FULL TP", alert.freq_once_per_bar)
+    strategy.exit("Sell", from_entry="Sell", comment = "TP", limit=tp2_y)
+    tradesToday := 5
 labelTpSl(y, txt, color) =>
-    label labelTpSl = percentStop != 0 ? label.new(bar_index + 1, y, txt, xloc.bar_index, yloc.price, color, label.style_label_left, color.white, size.normal) : na
+    label labelTpSl = percentStop != 0 ? label.new(bar_index, y, txt, xloc.bar_index, yloc.price, color, label.style_label_left, color.white, size.normal) : na
     label.delete(labelTpSl[1])
-labelTpSl(entry_y, "Entry: " + str.tostring(math.round_to_mintick(entry_y)), color.gray)
+// labelTpSl(entry_y, "Entry: " + str.tostring(math.round_to_mintick(entry_y)), color.gray)
 // labelTpSl(stop_y , "Stop Loss: " + str.tostring(math.round_to_mintick(stop_y)), color.red)
 // labelTpSl(tp1_y, "Take Profit 1: " + str.tostring(math.round_to_mintick(tp1_y)), color.green)
-labelTpSl(tp2_y, "Take Profit " + str.tostring(math.round_to_mintick(tp2_y)), color.green)
+// labelTpSl(tp2_y, "Take Profit " + str.tostring(math.round_to_mintick(tp2_y)), color.green)
 // labelTpSl(tp3_y, "Take Profit 3: " + str.tostring(math.round_to_mintick(tp3_y)), color.green)
 lineTpSl(y, color) =>
     line lineTpSl = percentStop != 0 ? line.new(bar_index - (trigger ? countBull : countBear) + 4, y, bar_index + 1, y, xloc.bar_index, extend.none, color, line.style_solid) : na
@@ -359,7 +370,7 @@ lineTpSl(entry_y, color.gray)
 lineTpSl(stop_y, color.red)
 // lineTpSl(tp1_y, color.green)
 // lineTpSl(tp2_y, color.green)
-lineTpSl(tp3_y, color.green)
+// lineTpSl(tp3_y, color.green)
 var dashboard_loc  = locationDashboard == "Top Right" ? position.top_right : locationDashboard == "Middle Right" ? position.middle_right : locationDashboard == "Bottom Right" ? position.bottom_right : locationDashboard == "Top Center" ? position.top_center : locationDashboard == "Middle Center" ? position.middle_center : locationDashboard == "Bottom Center" ? position.bottom_center : locationDashboard == "Top Left" ? position.top_left : locationDashboard == "Middle Left" ? position.middle_left : position.bottom_left
 var dashboard_size = sizeDashboard == "Large" ? size.large : sizeDashboard == "Normal" ? size.normal : sizeDashboard == "Small" ? size.small : size.tiny
 var dashboard      = showDashboard ? table.new(dashboard_loc, 2, 15, tableBgColor, #000000, 2, tableBgColor, 1) : na
