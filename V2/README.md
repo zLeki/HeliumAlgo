@@ -1,13 +1,9 @@
 # Work Of Art (Helium V2) Trading Strategy
-
-
+This may or may not be the greatest thing i've ever created, hopefully it makes me rich
 
 ## Profits YTD
 **QQQ**
 - Recommended Settings
-2,15,2,7,5
-
-Vol thresh: 0.5
-ATR Per: 27 (any works)
-<img width="2023" alt="Screenshot 2025-05-20 at 11 36 00 PM" src="https://github.com/user-attachments/assets/14f1bcd5-6184-4b42-8fac-98e8c1c2f309" />
+2,15,6,7,5 -> Bottom: 9,12,15,42
+<img width="1623" alt="Screenshot 2025-05-29 at 9 53 02 AM" src="https://github.com/user-attachments/assets/d52dc79a-5179-44cc-8421-1dd7985600ae" />
 (This is overlooking slippage, order delay, commision, etc)
