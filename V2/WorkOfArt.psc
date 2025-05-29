@@ -12,6 +12,7 @@ smooth1           = input.int(5, "Smoothing 1", 1, group="TREND RIBBON")
 smooth2           = input.int(8, "Smoothing 2", 1, group="TREND RIBBON")
 showReversal      = input(true, "Show Reversals", group="REVERSAL SIGNALS")
 showPdHlc         = input(false, "Show P.D H/L/C", group="PREVIOUS DAY HIGH LOW CLOSE")
+showProfitLines   = input(true, "Show Profile/Sl lines", group="BUY & SELL SIGNALS")
 lineColor         = input.color(color.yellow, "Line Colors", group="PREVIOUS DAY HIGH LOW CLOSE")
 lineWidth         = input.int(1, "Width Lines", group="PREVIOUS DAY HIGH LOW CLOSE")
 lineStyle         = input.string("Solid", "Line Style", ["Solid", "Dashed", "Dotted"])
@@ -158,25 +159,27 @@ wtDivBear = wtDivBear1 or wtDivBear2
 cyan = #00DBFF, cyan30 = color.new(cyan, 70)
 pink = #E91E63, pink30 = color.new(pink, 70)
 red  = #FF5252, red30  = color.new(red , 70)
-isMarketOpen = ((hour(time) > 9 or (hour(time) == 9 and minute(time) >= 30)) and hour(time) < endHour)//and not (hour(time) == 8)
+isMarketOpen = ((hour(time) > startHour or (hour(time) == startHour and minute(time) >= 35)) and hour(time) < endHour)
+
+//and not (hour(time) == 8)
 
 var float exit_size = 0.00
 off = percWidth(300, offsetSignal)
-plotshape(showBuySell and bull ? low  - off : na, "Buy Label" , shape.labelup  , location.absolute, cyan, 0, "Buy" , color.white, size=size.normal)
+// plotshape(showBuySell and bull ? low  - off : na, "Buy Label" , shape.labelup  , location.absolute, cyan, 0, "Buy" , color.white, size=size.normal)
 
     
-plotshape(showBuySell and bear ? high + off : na, "Sell Label", shape.labeldown, location.absolute, pink, 0, "Sell", color.white, size=size.normal)
-var tb = table.new(position.top_right, 5, 6
-  , bgcolor = #1e222d
-  , border_color = #373a46
-  , border_width = 1
-  , frame_color = #373a46
-  , frame_width = 1)
-if isMarketOpen
-    table.cell(tb, 0, 0, 'UsSpy 🥷\n🟢Online\n'+"💸PNL: "+str.tostring(strategy.openprofit), text_color = color.white, text_size = size.normal)
-else
-    table.cell(tb, 0, 0, 'UsSpy 🥷\n🔴Offline\n'+"💸PNL: "+str.tostring(strategy.openprofit), text_color = color.white, text_size = size.normal)
-table.merge_cells(tb, 0, 0, 4, 0)
+// plotshape(showBuySell and bear ? high + off : na, "Sell Label", shape.labeldown, location.absolute, pink, 0, "Sell", color.white, size=size.normal)
+// var tb = table.new(position.top_right, 5, 6
+//   , bgcolor = #1e222d
+//   , border_color = #373a46
+//   , border_width = 1
+//   , frame_color = #373a46
+//   , frame_width = 1)
+// if isMarketOpen
+//     table.cell(tb, 0, 0, 'UsSpy 🥷\n🟢Online\n'+"💸PNL: "+str.tostring(strategy.openprofit), text_color = color.white, text_size = size.normal)
+// else
+//     table.cell(tb, 0, 0, 'UsSpy 🥷\n🔴Offline\n'+"💸PNL: "+str.tostring(strategy.openprofit), text_color = color.white, text_size = size.normal)
+// table.merge_cells(tb, 0, 0, 4, 0)
 
 lStyle = lineStyle == "Solid" ? line.style_solid : lineStyle == "Dotted" ? line.style_dotted : line.style_dashed
 lSize  = labelSize == "small" ? size.small       : labelSize == "normal" ? size.normal       : size.large
@@ -212,7 +215,7 @@ newDay = ta.change(time("D"))
 var int tradesToday = 0
 if newDay
     tradesToday := 0
-if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0 and not isVolatile and longAllowed and tradesToday < maxTrades
+if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0 and not isVolatile  and longAllowed and tradesToday < maxTrades
     tradesToday += 1
     if (barstate.isconfirmed)
         tp_1_filled := true
@@ -259,8 +262,9 @@ if strategy.position_size > 0
     if not na(stop_line) and not na(profit_line)
         line.delete(stop_line)
         line.delete(profit_line)
-    stop_line := line.new(openBarIndex, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
-    profit_line := line.new(openBarIndex, tp2_y, bar_index + 1, tp2_y, color=color.green, width=2, extend=extend.none)
+    if (showProfitLines)
+        stop_line := line.new(openBarIndex, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
+        profit_line := line.new(openBarIndex, tp2_y, bar_index + 1, tp2_y, color=color.green, width=2, extend=extend.none)
     // Label (optional)
     // label.new(bar_index, stop_y, "Stop Loss: " + str.tostring(math.round_to_mintick(stop_y)), color=color.red, style=label.style_label_left, textcolor=color.white)
     // Stop loss check
@@ -304,8 +308,9 @@ if strategy.position_size < 0
     if not na(stop_line) and not na(profit_line)
         line.delete(stop_line)
         line.delete(profit_line)
-    stop_line := line.new(openBarIndex, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
-    profit_line := line.new(openBarIndex, tp2_y, bar_index + 1, tp2_y, color=color.green, width=2, extend=extend.none)
+    if (showProfitLines)
+        stop_line := line.new(openBarIndex, stop_y, bar_index + 1, stop_y, color=color.red, width=2, extend=extend.none)
+        profit_line := line.new(openBarIndex, tp2_y, bar_index + 1, tp2_y, color=color.green, width=2, extend=extend.none)
 
     // Label (optional)
     // Stop loss check
@@ -376,37 +381,37 @@ var dashboard_size = sizeDashboard == "Large" ? size.large : sizeDashboard == "N
 var dashboard      = showDashboard ? table.new(dashboard_loc, 2, 15, tableBgColor, #000000, 2, tableBgColor, 1) : na
 dashboard_cell(column, row, txt, signal=false) => table.cell(dashboard, column, row, txt, 0, 0, signal ? #000000 : tableTextColor, text_size=dashboard_size)
 dashboard_cell_bg(column, row, col) => table.cell_set_bgcolor(dashboard, column, row, col)
-if showDashboard
-    dashboard_cell(0, 0 , "SpyAlgo 🥷")
-    dashboard_cell(0, 1 , "Current Position")
-    dashboard_cell(0, 2 , "Current Trend")
-    dashboard_cell(0, 3 , "Volume")
-    dashboard_cell(0, 4 , "Timeframe")
-    dashboard_cell(0, 5 , "1 min:")
-    dashboard_cell(0, 6 , "3 min:")
-    dashboard_cell(0, 7 , "5 min:")
-    dashboard_cell(0, 8 , "15 min:")
-    dashboard_cell(0, 9 , "30 min:")
-    dashboard_cell(0, 10, "1 H:")
-    dashboard_cell(0, 11, "2 H:")
-    dashboard_cell(0, 12, "4 H:")
-    dashboard_cell(0, 13, "8 H:")
-    dashboard_cell(0, 14, "Daily:")
-    dashboard_cell(1, 0 , "V.5")
-    dashboard_cell(1, 1 , trigger ? "Buy" : "Sell", true), dashboard_cell_bg(1, 1, trigger ? color.green : color.red)
-    dashboard_cell(1, 2 , emaBull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 2, emaBull ? color.green : color.red)
-    dashboard_cell(1, 3 , str.tostring(volume))
-    dashboard_cell(1, 4 , "Trends")
-    dashboard_cell(1, 5 , TF1Bull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 5 , TF1Bull   ? color.green : color.red)
-    dashboard_cell(1, 6 , TF3Bull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 6 , TF3Bull   ? color.green : color.red)
-    dashboard_cell(1, 7 , TF5Bull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 7 , TF5Bull   ? color.green : color.red)
-    dashboard_cell(1, 8 , TF15Bull  ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 8 , TF15Bull  ? color.green : color.red)
-    dashboard_cell(1, 9 , TF30Bull  ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 9 , TF30Bull  ? color.green : color.red)
-    dashboard_cell(1, 10, TF60Bull  ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 10, TF60Bull  ? color.green : color.red)
-    dashboard_cell(1, 11, TF120Bull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 11, TF120Bull ? color.green : color.red)
-    dashboard_cell(1, 12, TF240Bull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 12, TF240Bull ? color.green : color.red)
-    dashboard_cell(1, 13, TF480Bull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 13, TF480Bull ? color.green : color.red)
-    dashboard_cell(1, 14, TFDBull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 14, TFDBull   ? color.green : color.red)
+// if showDashboard
+//     dashboard_cell(0, 0 , "SpyAlgo 🥷")
+//     dashboard_cell(0, 1 , "Current Position")
+//     dashboard_cell(0, 2 , "Current Trend")
+//     dashboard_cell(0, 3 , "Volume")
+//     dashboard_cell(0, 4 , "Timeframe")
+//     dashboard_cell(0, 5 , "1 min:")
+//     dashboard_cell(0, 6 , "3 min:")
+//     dashboard_cell(0, 7 , "5 min:")
+//     dashboard_cell(0, 8 , "15 min:")
+//     dashboard_cell(0, 9 , "30 min:")
+//     dashboard_cell(0, 10, "1 H:")
+//     dashboard_cell(0, 11, "2 H:")
+//     dashboard_cell(0, 12, "4 H:")
+//     dashboard_cell(0, 13, "8 H:")
+//     dashboard_cell(0, 14, "Daily:")
+//     dashboard_cell(1, 0 , "V.5")
+//     dashboard_cell(1, 1 , trigger ? "Buy" : "Sell", true), dashboard_cell_bg(1, 1, trigger ? color.green : color.red)
+//     dashboard_cell(1, 2 , emaBull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 2, emaBull ? color.green : color.red)
+//     dashboard_cell(1, 3 , str.tostring(volume))
+//     dashboard_cell(1, 4 , "Trends")
+//     dashboard_cell(1, 5 , TF1Bull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 5 , TF1Bull   ? color.green : color.red)
+//     dashboard_cell(1, 6 , TF3Bull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 6 , TF3Bull   ? color.green : color.red)
+//     dashboard_cell(1, 7 , TF5Bull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 7 , TF5Bull   ? color.green : color.red)
+//     dashboard_cell(1, 8 , TF15Bull  ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 8 , TF15Bull  ? color.green : color.red)
+//     dashboard_cell(1, 9 , TF30Bull  ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 9 , TF30Bull  ? color.green : color.red)
+//     dashboard_cell(1, 10, TF60Bull  ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 10, TF60Bull  ? color.green : color.red)
+//     dashboard_cell(1, 11, TF120Bull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 11, TF120Bull ? color.green : color.red)
+//     dashboard_cell(1, 12, TF240Bull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 12, TF240Bull ? color.green : color.red)
+//     dashboard_cell(1, 13, TF480Bull ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 13, TF480Bull ? color.green : color.red)
+//     dashboard_cell(1, 14, TFDBull   ? "Bullish" : "Bearish", true), dashboard_cell_bg(1, 14, TFDBull   ? color.green : color.red)
 
 // Alerts
 alert01 = ta.crossover(ribbon1, ribbon2)
