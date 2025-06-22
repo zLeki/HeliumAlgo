@@ -1,3 +1,4 @@
+
 //@version=5
 strategy("Work Of Art", overlay=true, max_labels_count=500)
 
@@ -6,6 +7,7 @@ sensitivity       = input.float(3, "Sensitivity (1-16)", 1, 50, group="BUY & SEL
 percentStop       = input.float(1, "Take Profit % (0 to Disable)", 0, group="BUY & SELL SIGNALS")
 maxTrades = input.int(3, "Max trades per day", group="BUY & SELL SIGNALS")
 atrMultiplier = input.float(1.5, "ATR Stop Multiplier", group="BUY & SELL SIGNALS")
+exitEod = input(false, "Exit EOD (End Of Day)", group="BUY & SELL SIGNALS")
 offsetSignal      = input.float(5, "Signals Offset", 0, group="BUY & SELL SIGNALS")
 showRibbon        = input(true, "Show Trend Ribbon", group="TREND RIBBON")
 smooth1           = input.int(5, "Smoothing 1", 1, group="TREND RIBBON")
@@ -38,7 +40,9 @@ showRevBands      = input.bool(true, "Show Reversal Bands", group="REVERSAL BAND
 lenRevBands       = input.int(30, "Length", group="REVERSAL BANDS")
 currentPrice = request.security(syminfo.tickerid, timeframe.period, close)
 startHour = input.int(8, "Trading Start Hour", group="TIME FILTER")
+startMin = input.int(35, "Start time of hour", group="TIME FILTER")
 endHour = input.int(20, "Trading End Hour", group="TIME FILTER")
+endMin = input.int(30, "End min", group = "TIME FILTER")
 var int openBarIndex = 0
 var bool tp_1_filled = true
 var bool tp_2_filled = true
@@ -159,8 +163,14 @@ wtDivBear = wtDivBear1 or wtDivBear2
 cyan = #00DBFF, cyan30 = color.new(cyan, 70)
 pink = #E91E63, pink30 = color.new(pink, 70)
 red  = #FF5252, red30  = color.new(red , 70)
-isMarketOpen = ((hour(time) > startHour or (hour(time) == startHour and minute(time) >= 35)) and hour(time) < endHour)
-
+isMarketOpen = (hour(time) == startHour  and minute(time) >= startMin) or (hour(time)  > startHour  and (hour(time) < endHour or (hour(time) == endHour and minute(time) <= endMin)) and dayofweek != dayofweek.monday and dayofweek != dayofweek.wednesday and dayofweek != dayofweek.thursday)
+if (hour == 15 and minute(time) == 30)
+    strategy.close_all("Exit EOD", "Exit EoD")
+if (exitEod) 
+    if ((hour(time) >= endHour))
+        if strategy.position_size != 0
+            alert("exit EOD")
+        strategy.close_all("EOD")
 //and not (hour(time) == 8)
 
 var float exit_size = 0.00
@@ -213,9 +223,56 @@ ema21 = ta.ema(close, 21)
 longAllowed = close > ema21 and close > ema
 newDay = ta.change(time("D"))
 var int tradesToday = 0
+notLowVol = ta.atr(14) > ta.sma(ta.atr(14), 50)
+
+isNewsDay() =>
+    y = year(time)
+    m = month(time)
+    d = dayofmonth(time)
+    dow = dayofweek
+    cpi = (y == 2023 and ((m==1 and d==12) or (m==2 and d==14) or (m==3 and d==14) or (m==4 and d==11) or (m==5 and d==10) or (m==6 and d==13) or (m==7 and d==12) or (m==8 and d==10) or (m==9 and d==13) or (m==10 and d==11) or (m==11 and d==14) or (m==12 and d==12)))
+       or (y == 2024 and ((m==1 and d==11) or (m==2 and d==13) or (m==3 and d==12) or (m==4 and d==10) or (m==5 and d==15) or (m==6 and d==12) or (m==7 and d==10) or (m==8 and d==13) or (m==9 and d==11) or (m==10 and d==10) or (m==11 and d==13) or (m==12 and d==11)))
+    fomc = (y == 2023 and ((m==2 and d==1) or (m==3 and d==22) or (m==5 and d==3) or (m==6 and d==14) or (m==7 and d==26) or (m==9 and d==20) or (m==11 and d==1))) or (y == 2024 and ((m==1 and d==31) or (m==3 and d==20) or (m==5 and d==1) or (m==6 and d==12) or (m==7 and d==31) or (m==9 and d==18) or (m==12 and d==11))) or (y == 2025 and ((m==1 and d==29) or (m==3 and d==19) or (m==5 and d==7) or (m==6 and d==18) or (m==7 and d==30)))
+    nfp = dow == dayofweek.friday and d <= 7
+    ism = (dow != dayofweek.saturday and dow != dayofweek.sunday and d <= 3)
+    isQuadWitching = ((m == 3 or m == 6 or m == 9 or m == 12) and dow == dayofweek.friday and d >= 15 and d <= 21)
+    earnings = ( (y == 2023 and ((m==1 and d>=23 and d<=27) or (m==4 and d>=24 and d<=28) or (m==7 and d>=24 and d<=28) or (m==10 and d>=23 and d<=27))) or(y == 2024 and ((m==1 and d>=22 and d<=26) or (m==4 and d>=22 and d<=26) or (m==7 and d>=22 and d<=26) or (m==10 and d>=21 and d<=25))))
+    cpi or fomc or nfp or ism or isQuadWitching or earnings
+
+canTrade = not isNewsDay()
+
+prevClose = request.security(syminfo.tickerid, "D", close[1])
+gapPct = math.abs(open - prevClose) / prevClose
+gapThreshold = input.float(0.012, title="Gap % Threshold", step=0.001)  // 1.2% default
+avoidGap = gapPct > gapThreshold
+vix = request.security("CBOE:VIX", "D", close)
+vixThreshold = input.float(21, "VIX Max Threshold")  // Conservative
+vixAllowed = vix < vixThreshold
+nearPrevHigh = math.abs(close - dHigh) / dHigh < 0.002  // within 0.2%
+nearPrevLow = math.abs(close - dLow) / dLow < 0.002
+avoidPrevRange = nearPrevHigh or nearPrevLow
+insideBar = high <= high[1] and low >= low[1]
+inOpeningHour = hour == 9 or (hour == 10 and minute < 30)
+sweptHigh = high > dHigh and close < dHigh and inOpeningHour
+sweptLow = low < dLow and close > dLow and inOpeningHour
+judasSwing = sweptHigh or sweptLow
+sweptAndRejected = (sweptHigh and close < open) or (sweptLow and close > open)
+waitBarsAfterSweep = sweptAndRejected[1] or sweptAndRejected[2]
+
+isBearOB = close[2] > open[2] and close[1] < open[1] and high <= high[2]
+isBullOB = close[2] < open[2] and close[1] > open[1] and low >= low[2]
+rejectingBearOB = isBearOB and close < low[2]
+rejectingBullOB = isBullOB and close > high[2]
+orderBlockRejection = rejectingBearOB or rejectingBullOB 
+
+
+
+if not canTrade and not avoidGap and vixAllowed and not avoidPrevRange and not insideBar and not judasSwing and not sweptAndRejected and not waitBarsAfterSweep and not orderBlockRejection
+    isMarketOpen := false
+
 if newDay
     tradesToday := 0
-if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0 and not isVolatile  and longAllowed and tradesToday < maxTrades
+if showBuySell and bull and isMarketOpen and emaBull and strategy.opentrades == 0 and not isVolatile  and longAllowed and tradesToday < maxTrades 
     tradesToday += 1
     if (barstate.isconfirmed)
         tp_1_filled := true
@@ -274,7 +331,7 @@ if strategy.position_size > 0
         alert("🟥 Long Stop Loss Exit", alert.freq_once_per_bar_close)
 
 shortAllowed = close < ema21 and close < ema
-if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades == 0 and not isVolatile and shortAllowed and tradesToday < maxTrades
+if showBuySell and bear and isMarketOpen and not emaBull and strategy.opentrades == 0 and not isVolatile and shortAllowed and tradesToday < maxTrades 
     tradesToday += 1
     if (barstate.isconfirmed)
         tp_1_filled := true
@@ -343,7 +400,6 @@ if high > tp2_y and strategy.position_size > 0 and tp_2_filled
     strategy.exit("Buy", from_entry="Buy", comment = "TP", limit=tp2_y)
     alert("FULL TP", alert.freq_once_per_bar)
     log.info("Take profit 2 - Long side")
-    tradesToday := 5
     tp_2_filled := false
 if close > tp3_y and strategy.position_size > 0  and tp_3_filled
     strategy.close_all("tp3", "Buy")
@@ -352,14 +408,13 @@ if close > tp3_y and strategy.position_size > 0  and tp_3_filled
     tp_3_filled := false
 if close <= open_price and not tp_1_filled and strategy.position_size > 0
     // strategy.close_all("break-even "+str.tostring(open_price)+str.tostring(currentPrice))
-    alert("BE")
+    // alert("BE")
     log.info("BE - Long side")
 // SHORT
 //
 if low < tp2_y and strategy.position_size < 0
     alert("FULL TP", alert.freq_once_per_bar)
     strategy.exit("Sell", from_entry="Sell", comment = "TP", limit=tp2_y)
-    tradesToday := 5
 labelTpSl(y, txt, color) =>
     label labelTpSl = percentStop != 0 ? label.new(bar_index, y, txt, xloc.bar_index, yloc.price, color, label.style_label_left, color.white, size.normal) : na
     label.delete(labelTpSl[1])
