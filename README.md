@@ -4,6 +4,6 @@ This may or may not be the greatest thing i've ever created, hopefully it makes 
 ## Profits YTD
 **QQQ**
 - Recommended Settings
-2,15,6,7,5 -> Bottom: 9,12,15,42
-<img width="1623" alt="Screenshot 2025-05-29 at 9 53 02 AM" src="https://github.com/user-attachments/assets/d52dc79a-5179-44cc-8421-1dd7985600ae" />
+2,15,2,7,5 -> Bottom: 9,35,12,0,40,42,0.013,21
+<img width="2012" alt="Screenshot 2025-06-22 at 4 26 24 PM" src="https://github.com/user-attachments/assets/56a90efd-6673-403b-8424-4b01437f3b13" />
 (This is overlooking slippage, order delay, commision, etc)
